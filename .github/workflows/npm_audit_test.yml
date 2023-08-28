@@ -19,6 +19,7 @@ jobs:
       - name: install python packages
         run: |
           python -m pip install --upgrade pip
+          python -m pip install typer-cli
 
       - name: execute py script # run check_nodejs_code.py needs to have two parameters: 1. title 2. severity
         id: response

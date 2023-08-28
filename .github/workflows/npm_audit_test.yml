@@ -1,7 +1,7 @@
 name: npm audit test
 
 on:
-  pull_request
+  push
 
 
 jobs:

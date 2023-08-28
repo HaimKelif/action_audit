@@ -23,4 +23,4 @@ jobs:
       - name: execute py script # run check_nodejs_code.py needs to have two parameters: 1. title 2. severity
         id: response
         run: |
-          python check_nodejs_code.py axios critical
+          python check_nodejs_code.py --particular fix --severity low

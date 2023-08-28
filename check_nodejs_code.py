@@ -1,110 +1,104 @@
-import os
 import subprocess
-import sys
-import re
+import enum
+import typer
+from typing import Optional
+import json
+from typing import Dict, Union
 
 
-LOW = 'low'
-MODERATE = 'moderate'
-HIGH = 'high'
-CRITICAL = 'critical'
- 
+app = typer.Typer()
 
-def run_npd_audit():
-    # Run npm audit and return the output.
-    process = subprocess.Popen("npm audit", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    output, error = process.communicate()
 
-    # Is there an NPM error
-    if str(error) != "b''":
-        raise Exception('There is an NMP error:\n' + str(error))
+class Severity(enum.Enum):
+    LOW = "low"
+    MODERATE = "moderate"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+def run_npm_audit(input: str) -> json:
+    """
+    The function runs `npm audit --json` and returns a json
+    @params: input: str
+    @output: json
+    """
+    process = subprocess.Popen(
+        input, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+    )
+
+    (
+        output_bytes,
+        error,
+    ) = process.communicate()
+    output = json.loads(output_bytes)
+    if error:
+        raise Exception("There is an NMP error:\n" + error.decode())
     return output
 
 
-def check_is_particular_string(particular_string, output):
-    return str(output).count(str(particular_string)) 
-
-# Returs a string with the titles of NPM output. - all substring between "\n\n" and "\nSeverity". 
-def get_titels_from_output(output):
-    res = re.findall(r'\\n\\n(.*?)\\nSeverity', str(output))
-    return ''.join(res)
-
-# Returns the number of issues with the given severity or higher. 
-def check_severity_level(severity, output):
-    if str(severity) != LOW and str(severity) != MODERATE and\
-        str(severity) != HIGH and str(severity) != CRITICAL:
-        return 0
-    
-    numbr_of_issues = check_is_particular_string("Severity: "+ CRITICAL, output)
-    if str(severity) == CRITICAL:
-        return numbr_of_issues
-    
-    numbr_of_issues += check_is_particular_string("Severity: "+ HIGH, output)
-    if str(severity) == HIGH:
-        return numbr_of_issues
-    
-    numbr_of_issues += check_is_particular_string("Severity: "+ MODERATE, output)
-    if str(severity) == MODERATE:
-        return numbr_of_issues
-    
-    numbr_of_issues += check_is_particular_string("Severity: "+ LOW, output)
-    if str(severity) == LOW:
-        return numbr_of_issues
+def fine_titels_in_json(myjson: json, particular_string: str) -> bool:
+    """
+    Returns True if the given str is a titel of one of the vulnerabilities.
+    @params: myjson: json, particular_string: str
+    @output: bool
+    """
+    if "vulnerabilities" in myjson:
+        for jskey in myjson["vulnerabilities"]:
+            if particular_string in jskey:
+                return True
+    return False
 
 
-def main(particular_string, severity):   
-    exception_string = ''
+def find_severity_in_json(myjson: json, severity: str) -> bool:
+    """
+    Returns True if the given severity is in the json.
+    @params: myjson: json, severity: str
+    @output: bool
+    """
+    severity_list = get_severity_list(severity)
+    if "vulnerabilities" in myjson:
+        for jskey in myjson["vulnerabilities"]:
+            for sev in severity_list:
+                if sev == myjson["vulnerabilities"][jskey]["severity"]:
+                    return True
+    return False
 
-    # Get the output from 'npm audit'.
-    output = run_npd_audit() 
 
-    # Check is there the particular substring.
-    particular_string_number = check_is_particular_string(particular_string, get_titels_from_output(output))
-    if particular_string_number > 0: 
-        exception_string += "The given particular string (" + particular_string + ") is in " \
-            + str(particular_string_number) + " of the titles of security issues."
+def get_severity_list(severity: str) -> list[str]:
+    """
+    Returns list of the severity that equal or higher then the given severity.
+    @params: severity: str
+    @output: list[str]
+    """
+    if severity == Severity.LOW.value:
+        return [
+            Severity.LOW.value,
+            Severity.MODERATE.value,
+            Severity.HIGH.value,
+            Severity.CRITICAL.value,
+        ]
+    if severity == Severity.MODERATE.value:
+        return [Severity.MODERATE.value, Severity.HIGH.value, Severity.CRITICAL.value]
+    if severity == Severity.HIGH.value:
+        return [Severity.HIGH.value, Severity.CRITICAL.value]
+    if severity == Severity.CRITICAL.value:
+        return [Severity.CRITICAL.value]
+    return []
 
-    # Check if there are errors that equal or greater then the given severity.
-    severity_number = check_severity_level(severity, output)
-    if severity_number > 0:
-        exception_string += "\nThere are " + str(severity_number) + \
-            " security issues with equal or greater severity then " + severity + "."
-        
-    if exception_string != '':    
+
+@app.command()
+def main(particular: Optional[str] = None, severity: Optional[str] = None):
+    exception_string = ""
+
+    output = run_npm_audit("npm audit --json")
+
+    if fine_titels_in_json(output, particular):
+        exception_string += f"The given particular string ({particular}) is in one of the titles of security issues."
+    if find_severity_in_json(output, severity):
+        exception_string += f"\nThere are security issues with equal or greater severity then {severity}."
+    if len(exception_string) != 0:
         raise Exception(exception_string)
-
-    
-
-
-
-
-# tests:
-
-def test_check_is_particular_string():
-    print(check_is_particular_string('a', 'aaa'))
-    print(check_is_particular_string('b', 'aaa'))
-    print(check_is_particular_string('low', 'aaa low lowest'))
-    print(check_is_particular_string('low ', 'aaa low lowest good'))
-
-def test_run_npd_audit():
-    process = subprocess.Popen("npm audit", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    output, error = process.communicate()
-    print(str(output)) 
-
-def test_get_titels_from_output():
-    process = subprocess.Popen("npm audit", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    output, error = process.communicate()
-    get_titels_from_output(output)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 3:
-        main(str(sys.argv[1]),str(sys.argv[2]))
-    else: raise Exception('test as no parameters')
-    # test_run_npd_audit()
-    # test_get_titels_from_output()
-    # test_check_is_particular_string()
-
-
-
-
+    app()

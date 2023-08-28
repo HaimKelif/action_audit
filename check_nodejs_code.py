@@ -101,9 +101,13 @@ def main(particular: Optional[str] = None, severity: Optional[str] = None):
     if "vulnerabilities" in output:
         output = output["vulnerabilities"]
         if fine_titels_in_json(output, particular):
-            exception_string += f"The given particular string ({particular}) is in one of the titles of security issues."
+            exception_string += (
+                f"The string ({particular}) is in one of the titles of security issues."
+            )
         if find_severity_in_json(output, severity):
-            exception_string += f"\nThere are security issues with equal or greater severity then {severity}."
+            exception_string += (
+                f"\nThere are issues with equal or greater severity then {severity}."
+            )
         if len(exception_string) != 0:
             raise Exception(exception_string)
     return True

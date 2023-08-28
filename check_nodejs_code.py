@@ -18,7 +18,7 @@ class Severity(enum.Enum):
 
 def run_npm_audit(input: str) -> json:
     """
-    The function runs `npm audit --json` and returns a json
+    Runs `npm audit --json` and returns a json
     @params: input: str
     @output: json
     """
@@ -30,9 +30,11 @@ def run_npm_audit(input: str) -> json:
         output_bytes,
         error,
     ) = process.communicate()
-    output = json.loads(output_bytes)
+
     if error:
         raise Exception("There is an NMP error:\n" + error.decode())
+
+    output = json.loads(output_bytes)
     return output
 
 
@@ -42,24 +44,23 @@ def fine_titels_in_json(myjson: json, particular_string: str) -> bool:
     @params: myjson: json, particular_string: str
     @output: bool
     """
-    if "vulnerabilities" in myjson:
-        for jskey in myjson["vulnerabilities"]:
-            if particular_string in jskey:
-                return True
+    for jskey in myjson:
+        if particular_string in jskey:
+            return True
     return False
 
 
 def find_severity_in_json(myjson: json, severity: str) -> bool:
     """
-    Returns True if the given severity is in the json.
+    Returns True if the given severity is in the json.vulnerabilities.
     @params: myjson: json, severity: str
     @output: bool
     """
     severity_list = get_severity_list(severity)
-    if "vulnerabilities" in myjson:
-        for jskey in myjson["vulnerabilities"]:
-            for sev in severity_list:
-                if sev == myjson["vulnerabilities"][jskey]["severity"]:
+    for jskey in myjson:
+        for sev in severity_list:
+            if "severity" in myjson[jskey]:
+                if sev == myjson[jskey]["severity"]:
                     return True
     return False
 
@@ -88,16 +89,24 @@ def get_severity_list(severity: str) -> list[str]:
 
 @app.command()
 def main(particular: Optional[str] = None, severity: Optional[str] = None):
+    """
+    Rase Exception if npm audit is not valid according to the givven severity and str.
+    @params: particular: str, severity: str (Typer)
+    @output: None
+    """
     exception_string = ""
 
     output = run_npm_audit("npm audit --json")
 
-    if fine_titels_in_json(output, particular):
-        exception_string += f"The given particular string ({particular}) is in one of the titles of security issues."
-    if find_severity_in_json(output, severity):
-        exception_string += f"\nThere are security issues with equal or greater severity then {severity}."
-    if len(exception_string) != 0:
-        raise Exception(exception_string)
+    if "vulnerabilities" in output:
+        output = output["vulnerabilities"]
+        if fine_titels_in_json(output, particular):
+            exception_string += f"The given particular string ({particular}) is in one of the titles of security issues."
+        if find_severity_in_json(output, severity):
+            exception_string += f"\nThere are security issues with equal or greater severity then {severity}."
+        if len(exception_string) != 0:
+            raise Exception(exception_string)
+    return True
 
 
 if __name__ == "__main__":
